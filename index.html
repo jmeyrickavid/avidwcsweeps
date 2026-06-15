@@ -1578,4 +1578,54 @@ function showTab(name) {
   document.getElementById(`tab-${name}`).classList.add('active');
   document.querySelector(`[data-tab="${name}"]`).classList.add('active');
   // Lazy-load bracket when first opened
-  if (name === 'bracket' && Object.keys(bra
+  if (name === 'bracket' && Object.keys(bracketEvents).length === 0) loadBracket();
+}
+
+// ════════════════════════════════════════════════════
+// MAIN LOAD
+// ════════════════════════════════════════════════════
+async function loadData() {
+  const btn = document.getElementById('refreshBtn');
+  const ts  = document.getElementById('lastUpdated');
+  btn.disabled = true;
+  btn.textContent = '↻ Loading\u2026';
+  ts.textContent = 'Fetching live data\u2026';
+
+  teamStandings = {};
+  bracketEvents = {};
+
+  try {
+    const [todayEvts, standingsData] = await Promise.all([
+      fetchMatchesForSydneyDate(currentMatchDate),
+      fetchStandings(),
+    ]);
+
+    matchEvents = todayEvts;
+
+    const gotStandings = parseStandings(standingsData);
+    if (!gotStandings) {
+      const recent = await fetchRecentResults();
+      allEvents = recent;
+      computeStandingsFromResults(recent);
+    } else {
+      allEvents = todayEvts;
+    }
+  } catch(e) {
+    console.error('loadData error:', e);
+  }
+
+  // Always render — even with empty data the page should not stay on the spinner
+  renderLeaderboard();
+  renderMatchesForDate(matchEvents);
+
+  if (Object.keys(bracketEvents).length > 0) loadBracket();
+
+  ts.textContent = `Updated ${new Date().toLocaleTimeString('en-AU', {timeZone: TZ})}`;
+  btn.disabled = false;
+  btn.textContent = '\u21bb Refresh';
+}
+
+document.addEventListener('DOMContentLoaded', loadData);
+</script>
+</body>
+</html>
