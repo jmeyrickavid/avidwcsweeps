@@ -904,19 +904,21 @@ function fmtDate(d) {
   return d.toISOString().slice(0,10).replace(/-/g,'');
 }
 
+const TZ = 'Australia/Sydney';
+
 function fmtDisplayDate(d) {
-  return d.toLocaleDateString('en-AU', { weekday:'short', day:'numeric', month:'long', year:'numeric' });
+  return d.toLocaleDateString('en-AU', { weekday:'short', day:'numeric', month:'long', year:'numeric', timeZone:TZ });
 }
 
 function fmtTime(dateStr) {
   try {
-    return new Date(dateStr).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',timeZoneName:'short'});
+    return new Date(dateStr).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit',timeZoneName:'short',timeZone:TZ});
   } catch { return ''; }
 }
 
 function fmtShortDate(dateStr) {
   try {
-    return new Date(dateStr).toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+    return new Date(dateStr).toLocaleDateString('en-AU',{day:'numeric',month:'short',timeZone:TZ});
   } catch { return ''; }
 }
 
@@ -1591,10 +1593,4 @@ async function loadData() {
 }
 
 // Auto-refresh every 90s
-setInterval(loadData, 90000);
-
-// Init
-loadData();
-</script>
-</body>
-</html>
+setInter
