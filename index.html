@@ -715,6 +715,7 @@
   <button class="tab-btn active" data-tab="leaderboard" onclick="showTab('leaderboard')">🏆 Leaderboard</button>
   <button class="tab-btn" data-tab="matches"     onclick="showTab('matches')">⚽ Matches</button>
   <button class="tab-btn" data-tab="bracket"     onclick="showTab('bracket')">📋 Full Draw</button>
+  <button class="tab-btn" data-tab="golden"      onclick="showTab('golden')">👟 Golden Boot</button>
 </nav>
 
 <main>
@@ -726,6 +727,9 @@
   </div>
   <div id="tab-bracket" class="tab-content">
     <div class="loading"><span class="spinner"></span> Building bracket…</div>
+  </div>
+  <div id="tab-golden" class="tab-content">
+    <div class="loading"><span class="spinner"></span> Loading scorers…</div>
   </div>
 </main>
 
@@ -1570,6 +1574,122 @@ function renderDraw() {
 }
 
 // ════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════
+// GOLDEN BOOT
+// ════════════════════════════════════════════════════
+function renderGoldenBoot(events) {
+  const el = document.getElementById('tab-golden');
+
+  const scorers = {};
+  for (const ev of (events || [])) {
+    const comp = ev.competitions?.[0];
+    if (!comp?.status?.type?.completed) continue;
+    for (const detail of (comp.details || [])) {
+      if (!detail.scoringPlay || detail.ownGoal) continue;
+      for (const athlete of (detail.athletesInvolved || [])) {
+        const id = athlete.id;
+        if (!scorers[id]) {
+          scorers[id] = {
+            id,
+            name: athlete.displayName || athlete.fullName || 'Unknown',
+            headshot: athlete.headshot || null,
+            teamId: athlete.team?.id,
+            goals: 0,
+            penalties: 0,
+          };
+        }
+        scorers[id].goals++;
+        if (detail.penaltyKick) scorers[id].penalties++;
+      }
+    }
+  }
+
+  // Map team IDs to country info via competitor data
+  const teamToCountry = {};
+  for (const ev of (events || [])) {
+    const comp = ev.competitions?.[0];
+    if (!comp) continue;
+    for (const c of (comp.competitors || [])) {
+      if (c.team?.id) {
+        teamToCountry[c.team.id] = {
+          name: c.team.displayName || '',
+          abbr: (c.team.abbreviation || '').toLowerCase(),
+          country: espnToDrawCountry(c.team),
+        };
+      }
+    }
+  }
+
+  for (const s of Object.values(scorers)) {
+    const tm = teamToCountry[s.teamId] || {};
+    s.teamName = tm.name || '';
+    s.teamAbbr = tm.abbr || '';
+    s.country   = tm.country || null;
+  }
+
+  const ranked = Object.values(scorers)
+    .filter(s => s.goals > 0)
+    .sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name));
+
+  if (ranked.length === 0) {
+    el.innerHTML = `<div class="alert alert-info" style="margin-top:24px">
+      ⏳ Goal data will appear once matches are completed.
+    </div>`;
+    return;
+  }
+
+  const medalIcon = r => r === 1 ? '🥇' : r === 2 ? '🥈' : r === 3 ? '🥉' : '';
+  const rowCls    = r => r === 1 ? 'rank-gold' : r === 2 ? 'rank-silver' : r === 3 ? 'rank-bronze' : '';
+
+  let html = `<h2 class="section-header">👟 Golden Boot — Top Scorers</h2>
+  <table class="leaderboard-table">
+    <thead><tr>
+      <th class="center">#</th>
+      <th>Player</th>
+      <th>Country</th>
+      <th class="center">Goals</th>
+      <th class="center" style="font-size:11px;color:var(--calm)">Pen</th>
+    </tr></thead><tbody>`;
+
+  let prevGoals = null, dispRank = 0, actRank = 0;
+  for (const s of ranked) {
+    actRank++;
+    if (s.goals !== prevGoals) { dispRank = actRank; prevGoals = s.goals; }
+    const flag   = s.country ? (FLAGS[s.country] || '🏳️') : '🏳️';
+    const isAvid = s.country && getParticipants(s.country).length > 0;
+    const ppl    = isAvid ? getParticipants(s.country).map(p => p.name).join(', ') : '';
+    const logoSrc = s.teamAbbr
+      ? `https://a.espncdn.com/i/teamlogos/countries/500/${s.teamAbbr}.png`
+      : '';
+
+    html += `<tr>
+      <td class="rank-cell ${rowCls(dispRank)}">${medalIcon(dispRank) || dispRank}</td>
+      <td class="participant-name" style="color:${isAvid ? 'var(--teal)' : 'var(--charcoal)'}">
+        ${s.headshot
+          ? `<img src="${s.headshot}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:8px;border:2px solid ${isAvid ? 'var(--teal)' : 'var(--home)'}">`
+          : ''}
+        ${s.name}
+        ${isAvid ? `<span style="font-size:11px;color:var(--calm);font-weight:400;display:block;padding-left:${s.headshot ? '36px' : '0'}">${ppl}’s pick 🎯</span>` : ''}
+      </td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px">
+          ${logoSrc ? `<img class="team-logo-sm" src="${logoSrc}" data-fb="${flag}" data-sz="14px" onerror="imgErr(this)" alt="${s.teamName}">` : flag}
+          <span style="font-size:13px">${s.teamName}</span>
+        </div>
+      </td>
+      <td class="pts-cell" style="font-size:22px">${s.goals}</td>
+      <td class="center" style="font-size:13px;color:var(--calm)">${s.penalties || '–'}</td>
+    </tr>`;
+  }
+
+  html += `</tbody></table>
+  <div style="margin-top:12px;font-size:12px;color:var(--calm);font-family:Arial,sans-serif">
+    Pen = penalties included in goals total · AVID picks highlighted in teal
+  </div>`;
+  el.innerHTML = html;
+}
+
+// ════════════════════════════════════════════════════
 // TAB NAVIGATION
 // ════════════════════════════════════════════════════
 function showTab(name) {
@@ -1588,8 +1708,8 @@ async function loadData() {
   const btn = document.getElementById('refreshBtn');
   const ts  = document.getElementById('lastUpdated');
   btn.disabled = true;
-  btn.textContent = '↻ Loading\u2026';
-  ts.textContent = 'Fetching live data\u2026';
+  btn.textContent = '↻ Loading…';
+  ts.textContent = 'Fetching live data…';
 
   teamStandings = {};
   bracketEvents = {};
@@ -1617,12 +1737,13 @@ async function loadData() {
   // Always render — even with empty data the page should not stay on the spinner
   renderLeaderboard();
   renderMatchesForDate(matchEvents);
+  renderGoldenBoot(allEvents);
 
   if (Object.keys(bracketEvents).length > 0) loadBracket();
 
   ts.textContent = `Updated ${new Date().toLocaleTimeString('en-AU', {timeZone: TZ})}`;
   btn.disabled = false;
-  btn.textContent = '\u21bb Refresh';
+  btn.textContent = '↻ Refresh';
 }
 
 document.addEventListener('DOMContentLoaded', loadData);
