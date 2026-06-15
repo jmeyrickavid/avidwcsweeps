@@ -925,43 +925,53 @@ function fmtShortDate(dateStr) {
 // ════════════════════════════════════════════════════
 // FETCH
 // ════════════════════════════════════════════════════
-async function fetchDate(date) {
+// All fetches get a hard 10-second timeout so the page never hangs
+async function apiFetch(url) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 10000);
   try {
-    const ds = fmtDate(date);
-    const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${ds}`);
-    const d = await r.json();
-    return d.events || [];
-  } catch { return []; }
+    const r = await fetch(url, {signal: ctrl.signal});
+    clearTimeout(timer);
+    if (!r.ok) throw new Error(r.status);
+    return await r.json();
+  } catch(e) {
+    clearTimeout(timer);
+    return null;
+  }
+}
+
+async function fetchDate(date) {
+  const ds = fmtDate(date);
+  const d = await apiFetch(`https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=${ds}`);
+  return d?.events || [];
 }
 
 async function fetchStandings() {
-  try {
-    const r = await fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/standings');
-    if (!r.ok) throw new Error();
-    const d = await r.json();
-    return d;
-  } catch { return null; }
+  return await apiFetch('https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/standings');
 }
 
 async function fetchGroupStandings() {
-  try {
-    const r = await fetch('https://site.api.espn.com/apis/v2/sports/soccer/fifa.world/standings?season=2026');
-    if (!r.ok) throw new Error();
-    const d = await r.json();
-    return d.children || [];
-  } catch { return []; }
+  const d = await apiFetch('https://site.api.espn.com/apis/v2/sports/soccer/fifa.world/standings?season=2026');
+  return d?.children || [];
 }
 
-// Scan last 20 days to build standings from results
+// Scan tournament days in parallel to build standings from results
 async function fetchRecentResults() {
-  const all = [];
+  const days = [];
   const today = new Date();
   for (let i = 0; i <= 20; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
     if (d < TOURNAMENT_START) break;
-    const evts = await fetchDate(d);
-    all.push(...evts);
+    days.push(d);
+  }
+  const results = await Promise.all(days.map(d => fetchDate(d)));
+  const all = [];
+  const seen = new Set();
+  for (const evts of results) {
+    for (const e of evts) {
+      if (!seen.has(e.id)) { seen.add(e.id); all.push(e); }
+    }
   }
   return all;
 }
@@ -1568,13 +1578,4 @@ function showTab(name) {
 
 // ════════════════════════════════════════════════════
 // MAIN LOAD
-// ════════════════════════════════════════════════════
-async function loadData() {
-  const btn = document.getElementById('refreshBtn');
-  const ts  = document.getElementById('lastUpdated');
-  btn.disabled = true;
-  btn.textContent = '↻ Loading…';
-  ts.textContent = 'Fetching live data…';
-
-  teamStandings = {};
-  bracke
+// ══════════════════════════
