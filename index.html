@@ -769,10 +769,10 @@ const PARTICIPANTS = [
   { name:'Scott',        teams:["Côte d'Ivoire"] },
   { name:'Katja',        teams:['Croatia'] },
   { name:'Janeen',       teams:['Curaçao'] },
-  { name:'Craig',        teams:['Ecuador','Switzerland'] },
+  { name:'Craig',        teams:['Ecuador','South Africa'] },
   { name:'Chris',        teams:['Egypt'] },
   { name:'Joanne',       teams:['England'] },
-  { name:'Jason',        teams:['France','South Africa'] },
+  { name:'Jason',        teams:['France','Switzerland'] },
   { name:'Nicki',        teams:['Germany'] },
   { name:'Richard',      teams:['Ghana'] },
   { name:'Anthony Z',    teams:['Haiti'] },
@@ -1061,14 +1061,15 @@ function computeStandingsFromResults(events) {
 // RENDER: LEADERBOARD
 // ════════════════════════════════════════════════════
 function calcPoints(p) {
-  let pts=0, bestRound='group';
+  let pts=0, bestRound='group', gd=0;
   for (const t of p.teams) {
     const s = teamStandings[t];
     if (!s) continue;
     pts += (s.pts||0) + (ROUND_BONUS[s.status]||0);
+    gd  += ((s.gf||0) - (s.ga||0));
     if (ROUND_ORDER.indexOf(s.status) > ROUND_ORDER.indexOf(bestRound)) bestRound = s.status;
   }
-  return {pts, bestRound};
+  return {pts, bestRound, gd};
 }
 
 function roundBadge(round) {
@@ -1091,7 +1092,7 @@ function renderLeaderboard() {
   const hasData = Object.keys(teamStandings).length > 0;
 
   const ranked = PARTICIPANTS.map(p=>({...p,...calcPoints(p)}))
-    .sort((a,b)=>b.pts-a.pts||a.name.localeCompare(b.name));
+    .sort((a,b)=>b.pts-a.pts||b.gd-a.gd||a.name.localeCompare(b.name));
 
   const completed = allEvents.filter(e=>e.competitions?.[0]?.status?.type?.completed).length;
   const live      = allEvents.filter(e=>e.competitions?.[0]?.status?.type?.state==='in').length;
@@ -1113,6 +1114,7 @@ function renderLeaderboard() {
       <th>Participant</th>
       <th>Team(s)</th>
       <th class="center">Pts</th>
+      <th class="center" style="font-size:11px">GD</th>
       <th>Round</th>
     </tr></thead>
     <tbody>`;
@@ -1134,11 +1136,13 @@ function renderLeaderboard() {
       </span>`;
     }).join('');
 
+    const gdStr = p.gd > 0 ? `+${p.gd}` : `${p.gd}`;
     html += `<tr>
       <td class="rank-cell ${rc}">${dispRank}</td>
       <td class="participant-name">${p.name}</td>
       <td><div class="team-badges">${badges}</div></td>
       <td class="pts-cell">${p.pts}</td>
+      <td class="center" style="font-family:'Barlow Condensed',Arial,sans-serif;font-weight:700;font-size:16px;color:${p.gd>0?'var(--teal)':p.gd<0?'#c62828':'var(--calm)'}">${gdStr}</td>
       <td>${roundBadge(p.bestRound)}</td>
     </tr>`;
   }
