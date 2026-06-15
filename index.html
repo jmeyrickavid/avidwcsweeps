@@ -1220,13 +1220,29 @@ function matchCard(event) {
   </div>`;
 }
 
+// Fetch all matches that fall on the given date in Sydney time.
+// A Sydney day spans two UTC dates (AEST = UTC+10, AEDT = UTC+11),
+// so we fetch both and filter by Sydney date.
+async function fetchMatchesForSydneyDate(date) {
+  const sydStr = date.toLocaleDateString('en-CA', {timeZone: TZ}); // YYYY-MM-DD in Sydney
+  // The previous UTC date may contain early-morning Sydney matches
+  const prevUtc = new Date(date);
+  prevUtc.setDate(prevUtc.getDate() - 1);
+  const [evtsToday, evtsPrev] = await Promise.all([fetchDate(date), fetchDate(prevUtc)]);
+  const all = [...evtsPrev, ...evtsToday].filter((e, i, arr) => arr.findIndex(x => x.id === e.id) === i);
+  return all.filter(ev => {
+    const evSyd = new Date(ev.date).toLocaleDateString('en-CA', {timeZone: TZ});
+    return evSyd === sydStr;
+  });
+}
+
 async function changeDate(delta) {
   const newDate = new Date(currentMatchDate);
   newDate.setDate(newDate.getDate() + delta);
   if (newDate < TOURNAMENT_START || newDate > TOURNAMENT_END) return;
   currentMatchDate = newDate;
   document.getElementById('tab-matches').innerHTML = '<div class="loading"><span class="spinner"></span> Loading…</div>';
-  matchEvents = await fetchDate(currentMatchDate);
+  matchEvents = await fetchMatchesForSydneyDate(currentMatchDate);
   renderMatchesForDate(matchEvents);
 }
 
@@ -1561,36 +1577,4 @@ async function loadData() {
   ts.textContent = 'Fetching live data…';
 
   teamStandings = {};
-  bracketEvents = {};  // reset bracket cache
-
-  // Fetch today's matches and standings in parallel
-  const [todayEvts, standingsData] = await Promise.all([
-    fetchDate(currentMatchDate),
-    fetchStandings(),
-  ]);
-
-  matchEvents = todayEvts;
-
-  // Build standings
-  const gotStandings = parseStandings(standingsData);
-  if (!gotStandings) {
-    const recent = await fetchRecentResults();
-    allEvents = recent;
-    computeStandingsFromResults(recent);
-  } else {
-    allEvents = todayEvts;
-  }
-
-  renderLeaderboard();
-  renderMatchesForDate(matchEvents);
-
-  // Refresh bracket if it's been loaded
-  if (Object.keys(bracketEvents).length > 0) loadBracket();
-
-  ts.textContent = `Updated ${new Date().toLocaleTimeString('en-AU')}`;
-  btn.disabled = false;
-  btn.textContent = '↻ Refresh';
-}
-
-// Auto-refresh every 90s
-setInter
+  bracke
